@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Callback</title></head>
+<body>
+<h1>Sign-in returned</h1>
+<div id="info">Parsing sign-in info...</div>
+<script>
+// parse URL fragment (implicit flow) for id_token
+function parseHash(hash){
+if(hash.startsWith('#')) hash = hash.slice(1);
+const kv = Object.fromEntries(hash.split('&').map(p=>p.split('=').map(decodeURIComponent)));
+return kv;
+}
+
+
+const data = parseHash(window.location.hash || '');
+const info = document.getElementById('info');
+if(!data.id_token){ info.innerText = 'No id_token found. You may be using a different OAuth flow.'; }
+else{
+// decode id_token (JWT) payload
+function decodeJwtPayload(token){
+const parts = token.split('.');
+if(parts.length<2) return null;
+try{ return JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/'))); }catch(e){return null}
+}
+const payload = decodeJwtPayload(data.id_token);
+info.innerHTML = '<pre>'+JSON.stringify(payload, null, 2)+'</pre>';
+}
+</script>
+</body>
+</html>
