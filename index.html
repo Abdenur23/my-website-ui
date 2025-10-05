@@ -1,110 +1,68 @@
 <!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Simple Sign-in</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: system-ui, -apple-system, Arial; padding: 28px; max-width: 720px; margin:auto; }
-    button { padding:10px 14px; margin:6px 0; }
-    #terms { border:1px solid #ddd; padding:12px; background:#fafafa; }
-  </style>
-  <script>
-    // ===== CONFIG - REPLACE THESE PLACEHOLDERS =====
-    const COGNITO_DOMAIN = "<COGNITO_DOMAIN>"; // e.g. userpool-simple-ui.auth.us-east-1.amazoncognito.com
-    const CLIENT_ID = "<COGNITO_APP_CLIENT_ID>"; // e.g. 6m91ev...
-    const API_URL = "<API_INVOKE_URL>"; // e.g. https://abc123.execute-api.us-east-1.amazonaws.com/addUser
-    // =================================================
-
-    const redirectUri = window.location.origin + "/";
-
-    // Helpers: decode JWT payload (base64url safe)
-    function decodeJwtPayload(jwt) {
-      try {
-        const p = jwt.split('.')[1];
-        const b64 = p.replace(/-/g,'+').replace(/_/g,'/');
-        const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
-        const json = atob(b64 + pad);
-        return JSON.parse(json);
-      } catch(e) { return null; }
-    }
-
-    function login() {
-      // Using implicit flow to return id_token in URL fragment (easy for SPA).
-      const scope = encodeURIComponent('openid email profile');
-      const url = `https://${COGNITO_DOMAIN}/login?client_id=${CLIENT_ID}&response_type=token&scope=${scope}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-      window.location.href = url;
-    }
-
-    function logout() {
-      const url = `https://${COGNITO_DOMAIN}/logout?client_id=${CLIENT_ID}&logout_uri=${encodeURIComponent(redirectUri)}`;
-      // Clear UI state then redirect
-      localStorage.removeItem('termsAccepted');
-      window.location.href = url;
-    }
-
-    async function sendUserToApi(email, idToken) {
-      if (!API_URL) return;
-      try {
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': idToken ? 'Bearer ' + idToken : ''
-          },
-          body: JSON.stringify({ email })
-        });
-      } catch (e) {
-        console.warn('API call failed', e);
-      }
-    }
-
-    function parseHashAndShow() {
-      if (!window.location.hash) return null;
-      const params = new URLSearchParams(window.location.hash.substring(1));
-      const idToken = params.get('id_token') || params.get('access_token');
-      if (!idToken) return null;
-      const payload = decodeJwtPayload(idToken);
-      if (!payload) return null;
-      // Clean up URL (remove hash)
-      try { history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch(e) {}
-      return { idToken, payload };
-    }
-
-    async function onLoad() {
-      // Terms acceptance UI
-      const accepted = localStorage.getItem('termsAccepted') === 'yes';
-      document.getElementById('acceptedFlag').textContent = accepted ? '✅ Terms accepted' : '⚠️ Terms required';
-
-      // If we returned from Cognito with id_token, parse & display
-      const auth = parseHashAndShow();
-      if (auth && auth.payload) {
-        const email = auth.payload.email || auth.payload.username || auth.payload['cognito:username'];
-        document.getElementById('status').innerHTML = `Logged in as <strong>${email}</strong><br/><button onclick="logout()">Logout</button>`;
-        // Save to backend DB (email -> cid)
-        await sendUserToApi(email, auth.idToken);
-        return;
-      }
-
-      // Not signed in
-      document.getElementById('status').innerHTML = accepted
-        ? `<button onclick="login()">I Accept & Sign in (Email / Google)</button>`
-        : `<div id="terms"><p>Please accept terms to continue.</p><button id="acceptBtn">Accept Terms</button></div>`;
-      const btn = document.getElementById('acceptBtn');
-      if (btn) btn.onclick = () => {
-        localStorage.setItem('termsAccepted','yes');
-        document.getElementById('status').innerHTML = `<button onclick="login()">I Accept & Sign in (Email / Google)</button>`;
-        document.getElementById('acceptedFlag').textContent = '✅ Terms accepted';
-      };
-    }
-    window.onload = onLoad;
-  </script>
-</head>
 <body>
-  <h1>Simple Signup / Signin</h1>
-  <p id="acceptedFlag"></p>
-  <div id="status"></div>
-  <hr/>
-  <small>Note: after sign-in you'll be redirected back and we will store your email and a generated cid into the database.</small>
+<h1>Welcome — accept Terms then Sign in</h1>
+
+
+<p>
+<a href="terms.html" target="_blank">Read Terms & Conditions</a>
+</p>
+
+
+<label>
+<input id="termsCheck" type="checkbox" /> I accept the Terms and Conditions
+</label>
+<br/><br/>
+
+
+<button id="showSignButtons">Accept & Continue</button>
+
+
+<div id="signButtons" style="display:none;margin-top:20px">
+<p>Choose a sign-in method:</p>
+<button id="emailSign">Sign up / Sign in with Email</button>
+<button id="googleSign">Sign in with Google</button>
+</div>
+
+
+<script>
+// --- REPLACE THESE with your values ---
+const COGNITO_DOMAIN = '<YOUR_COGNITO_DOMAIN>'; // example: mypool.auth.us-east-1.amazoncognito.com
+const CLIENT_ID = '<YOUR_APP_CLIENT_ID>';
+const AMPLIFY_REDIRECT = '<YOUR_AMPLIFY_APP_URL>/callback.html'; // example: https://master.d2abc123.amplifyapp.com/callback.html
+// --------------------------------------
+
+
+function buildHostedUILoginUrl(useGoogle=false){
+const base = useGoogle
+? `https://${COGNITO_DOMAIN}/oauth2/authorize` // we use authorize so we can pass identity_provider param
+: `https://${COGNITO_DOMAIN}/login`;
+
+
+const params = new URLSearchParams();
+params.set('response_type','token'); // implicit flow (SPA) — easiest to set up
+params.set('client_id', CLIENT_ID);
+params.set('redirect_uri', AMPLIFY_REDIRECT);
+params.set('scope', 'openid+email+profile');
+if(useGoogle) params.set('identity_provider','Google');
+
+
+return `${base}?${params.toString()}`;
+}
+
+
+document.getElementById('showSignButtons').onclick = function(){
+const c = document.getElementById('termsCheck');
+if(!c.checked){ alert('Please accept Terms first.'); return; }
+document.getElementById('signButtons').style.display='block';
+}
+
+
+document.getElementById('emailSign').onclick = function(){
+window.location = buildHostedUILoginUrl(false);
+}
+document.getElementById('googleSign').onclick = function(){
+window.location = buildHostedUILoginUrl(true);
+}
+</script>
 </body>
 </html>
